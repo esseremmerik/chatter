@@ -2,6 +2,7 @@
 
 namespace DevDojo\Chatter\Controllers;
 
+use DevDojo\Chatter\Events\RedirectUrl;
 use DevDojo\Chatter\Models\Models;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as Controller;
@@ -73,6 +74,10 @@ class ChatterPostController extends Controller
           $category = Models::category()->first();
         }
 
+        $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/'  . $discussion->slug;
+        $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
+        $redirectUrl = event($redirectEvent);
+
         if($new_post->id){
             if(function_exists('chatter_after_new_response')){
               chatter_after_new_response($request);
@@ -81,13 +86,14 @@ class ChatterPostController extends Controller
                 'chatter_alert_type' => 'success',
                 'chatter_alert' => 'Response successfully submitted to ' . config('chatter.titles.discussion') . '.'
                 );
-            return redirect('/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/'  . $discussion->slug)->with($chatter_alert);
+
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = array(
                 'chatter_alert_type' => 'danger',
                 'chatter_alert' => 'Sorry, there seems to have been a problem submitting your response.'
                 );
-            return redirect('/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $discussion->slug)->with($chatter_alert);
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
         }   
     }
 
