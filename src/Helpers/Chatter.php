@@ -9,7 +9,7 @@ class Chatter {
 	}
 
 	public static function getUserLink($user){
-		$relative_url = Config::get('chatter.user.relative_url_to_profile');
+		$relative_url = \Config::get('chatter.user.relative_url_to_profile');
 		if($relative_url){
 			$beginning_del = strpos($relative_url, '{');
 			$end_del = strpos($relative_url, '}');
