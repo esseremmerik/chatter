@@ -31,6 +31,11 @@ class ChatterServiceProvider extends ServiceProvider
         // include the routes file
         include __DIR__.'/Helpers/Chatter.php';
         include __DIR__.'/Routes/web.php';
+
+        $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'chatter');
+        $this->publishes([
+            __DIR__.'/../resources/lang' => resource_path('lang/vendor/chatter'),
+        ]);
     }
 
     /**

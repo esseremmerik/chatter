@@ -70,7 +70,7 @@ class ChatterDiscussionController extends Controller
         if(config('chatter.security.limit_time_between_posts')){
 
             if($this->notEnoughTimeBetweenDiscussion()){
-                $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' minute' : ' minutes';
+                $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' trans(\'chatter::messages.minute\') ' : ' trans(\'chatter::messages.minutes\')';
                 $chatter_alert = array(
                     'chatter_alert_type' => 'danger',
                     'chatter_alert' => 'In order to prevent spam, Please allow at least ' . config('chatter.security.time_between_posts') . $minute_copy . ' inbetween submitting content.'
@@ -134,13 +134,13 @@ class ChatterDiscussionController extends Controller
             }
             $chatter_alert = array(
                 'chatter_alert_type' => 'success',
-                'chatter_alert' => 'Successfully created new ' . config('chatter.titles.discussion') . '.'
+                'chatter_alert' => trans('chatter::messages.discussioncreatedsuccessful').'.'
                 );
             return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = array(
                 'chatter_alert_type' => 'danger',
-                'chatter_alert' => 'Whoops :( There seems to be a problem creating your ' . config('chatter.titles.discussion') . '.'
+                'chatter_alert' => trans('chatter::messages.problemcreatingdiscussion').'.'
                 );
             return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
         }

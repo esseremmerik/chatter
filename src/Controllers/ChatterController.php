@@ -29,7 +29,7 @@ class ChatterController extends Controller
     public function login(){
     	if (!Auth::check())
 		{
-			return \Redirect::to('/' . config('chatter.routes.login') . '?redirect=' . config('chatter.routes.home'))->with('flash_message', 'Please create an account before posting.');
+			return \Redirect::to('/' . config('chatter.routes.login') . '?redirect=' . config('chatter.routes.home'))->with('flash_message', trans('chatter::messages.createaccount'));
 		}
     }
 
