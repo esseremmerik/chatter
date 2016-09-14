@@ -1,4 +1,4 @@
-<?php
+<?php namespace DevDojo\Chatter\Helpers;
 
 class Chatter {
 	
