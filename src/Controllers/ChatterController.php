@@ -19,8 +19,7 @@ class ChatterController extends Controller
     		$category = Models::category()->where('slug', '=', $slug)->first();
     		if(isset($category->id)){
     			$discussions = Models::discussion()->with('user')->with('post')->with('postsCount')->with('category')->where('chatter_category_id', '=', $category->id)->orderBy('created_at', 'DESC')->paginate($pagination_results);
-    		} 
-    		
+    		}
     	}
 
     	$categories = Models::category()->all();

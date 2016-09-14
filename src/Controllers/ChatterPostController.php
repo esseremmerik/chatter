@@ -143,11 +143,15 @@ class ChatterPostController extends Controller
               $category = Models::category()->first();
             }
 
+            $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $discussion->slug;
+            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
+            $redirectUrl = event($redirectEvent);
+
             $chatter_alert = array(
                 'chatter_alert_type' => 'success',
                 'chatter_alert' => 'Successfully updated the ' . config('chatter.titles.discussion') . '.'
                 );
-            return redirect('/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $discussion->slug)->with($chatter_alert);
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
 
         } else {
 
@@ -155,7 +159,12 @@ class ChatterPostController extends Controller
                 'chatter_alert_type' => 'danger',
                 'chatter_alert' => 'Nah ah ah... Could not update your response. Make sure you\'re not doing anything shady.'
                 );
-            return redirect('/' . config('chatter.routes.home'))->with($chatter_alert);
+
+            $default = '/' . config('chatter.routes.home');
+            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default, "home"]);
+            $redirectUrl = event($redirectEvent);
+
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
 
         }
     }
@@ -166,7 +175,7 @@ class ChatterPostController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $post = Models::post()->find($id);
         if(!Auth::guest() && (Auth::user()->id == $post->user_id)){
@@ -184,25 +193,37 @@ class ChatterPostController extends Controller
                     'chatter_alert_type' => 'success',
                     'chatter_alert' => 'Successfully deleted response and ' . strtolower(config('chatter.titles.discussion')) . '.'
                 );
-                return redirect('/' . config('chatter.routes.home') )->with($chatter_alert);
+
+                $default = '/' . config('chatter.routes.home');
+                $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default, "home"]);
+                $redirectUrl = event($redirectEvent);
+
+                return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
 
             } else {
-
                 $chatter_alert = array(
                     'chatter_alert_type' => 'success',
                     'chatter_alert' => 'Successfully deleted response from the ' . config('chatter.titles.discussion') . '.'
                 );
-                return redirect('/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion->slug)->with($chatter_alert);
 
+                $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion->slug;
+                $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
+                $redirectUrl = event($redirectEvent);
+
+                return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
             }
-
         } else {
 
             $chatter_alert = array(
                 'chatter_alert_type' => 'danger',
                 'chatter_alert' => 'Nah ah ah... Could not delete the response. Make sure you\'re not doing anything shady.'
                 );
-            return redirect('/' . config('chatter.routes.home'))->with($chatter_alert);
+
+            $default = '/' . config('chatter.routes.home');
+            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default, "home"]);
+            $redirectUrl = event($redirectEvent);
+
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
 
         }
     }

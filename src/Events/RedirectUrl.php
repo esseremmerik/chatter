@@ -17,16 +17,20 @@ class RedirectUrl extends Event
 
     public $redirectUrl = "";
 
+    public $type = "";
+
     /**
      * Create a new event instance.
      *
      * @param  Order  $order
      * @return void
      */
-    public function __construct(Discussion $discussion, Request $request, String $url)
+    public function __construct(Discussion $discussion, Request $request, String $url, $type = "discussion")
     {
         $this->discussion = $discussion;
         $this->request = $request;
         $this->redirectUrl = $url;
+        $this->type = $type;
+
     }
 }
