@@ -167,14 +167,13 @@ class ChatterDiscussionController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($category, $slug = null)
+    public function show(Request $request, $category, $slug = null)
     {
         if(!isset($category) || !isset($slug)){
             $default = '/' . config('chatter.routes.home');
-            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default, "home"]);
+            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [Models::discussion(), $request, $default, "home"]);
             $redirectUrl = event($redirectEvent);
-
-            return redirect( $redirectUrl->redirectUrl );
+            return redirect( $redirectEvent->redirectUrl );
         }
 
         $discussion = Models::discussion()->where('slug', '=', $slug)->first();

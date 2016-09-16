@@ -206,7 +206,7 @@ class ChatterPostController extends Controller
                     'chatter_alert' => trans('chatter::messages.discussionresponsedeletedsuccesful').'.'
                 );
 
-                $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion->slug;
+                $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion->category->slug . '/' . $discussion->slug;
                 $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
                 $redirectUrl = event($redirectEvent);
 
