@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as Controller;
 use Auth;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Gate;
 use Validator;
 
 class ChatterPostController extends Controller
@@ -163,7 +164,7 @@ class ChatterPostController extends Controller
     public function destroy($id)
     {
         $post = Models::post()->find($id);
-        if(!Auth::guest() && (Auth::user()->id == $post->user_id)){
+        if(!Auth::guest() && (Auth::user()->id == $post->user_id || Gate::allows('remove-others-forum-comments'))){
             $post->delete();
 
             $count_post = Models::post()->where('chatter_discussion_id',$post->chatter_discussion_id)->count();
