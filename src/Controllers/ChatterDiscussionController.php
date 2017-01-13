@@ -70,12 +70,17 @@ class ChatterDiscussionController extends Controller
         if(config('chatter.security.limit_time_between_posts')){
 
             if($this->notEnoughTimeBetweenDiscussion()){
-                $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' minute' : ' minutes';
+                $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' trans(\'chatter::messages.minute\') ' : ' trans(\'chatter::messages.minutes\')';
                 $chatter_alert = array(
                     'chatter_alert_type' => 'danger',
                     'chatter_alert' => 'In order to prevent spam, Please allow at least ' . config('chatter.security.time_between_posts') . $minute_copy . ' inbetween submitting content.'
                     );
-                return redirect('/' . config('chatter.routes.home'))->with($chatter_alert)->withInput();
+
+                $default = '/' . config('chatter.routes.home');
+                $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default, "home"]);
+                $redirectUrl = event($redirectEvent);
+
+                return redirect($redirectEvent->redirectUrl)->with($chatter_alert)->withInput();
             }
         }
 
@@ -118,21 +123,26 @@ class ChatterDiscussionController extends Controller
 
         $post = Models::post()->create($new_post);
 
+
+        $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $slug;
+        $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
+        $redirectUrl = event($redirectEvent);
+
         if($post->id){
             if(function_exists('chatter_after_new_discussion')){
               chatter_after_new_discussion($request);
             }
             $chatter_alert = array(
                 'chatter_alert_type' => 'success',
-                'chatter_alert' => 'Successfully created new ' . config('chatter.titles.discussion') . '.'
+                'chatter_alert' => trans('chatter::messages.discussioncreatedsuccessful').'.'
                 );
-            return redirect('/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $slug)->with($chatter_alert);
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = array(
                 'chatter_alert_type' => 'danger',
-                'chatter_alert' => 'Whoops :( There seems to be a problem creating your ' . config('chatter.titles.discussion') . '.'
+                'chatter_alert' => trans('chatter::messages.problemcreatingdiscussion').'.'
                 );
-            return redirect('/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $slug)->with($chatter_alert);
+            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
         }
 
     }
@@ -157,16 +167,23 @@ class ChatterDiscussionController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($category, $slug = null)
+    public function show(Request $request, $category, $slug = null)
     {
         if(!isset($category) || !isset($slug)){
-            return redirect( config('chatter.routes.home') );
+            $default = '/' . config('chatter.routes.home');
+            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [Models::discussion(), $request, $default, "home"]);
+            $redirectUrl = event($redirectEvent);
+            return redirect( $redirectEvent->redirectUrl );
         }
 
         $discussion = Models::discussion()->where('slug', '=', $slug)->first();
         $discussion_category = Models::category()->find($discussion->chatter_category_id);
         if($category != $discussion_category->slug){
-            return redirect( config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion_category->slug . '/' . $discussion->slug );
+            $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion_category->slug . '/' . $discussion->slug;
+            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
+            $redirectUrl = event($redirectEvent);
+
+            return redirect( $redirectUrl->redirectUrl );
         }
         $posts = Models::post()->with('user')->where('chatter_discussion_id', '=', $discussion->id)->orderBy('created_at', 'ASC')->paginate(10);
         return view('chatter::discussion', compact('discussion', 'posts'));
