@@ -2,31 +2,35 @@
 
 namespace DevDojo\Chatter\Controllers;
 
-use DevDojo\Chatter\Models\Models;
-use Illuminate\Http\Request;
-use Illuminate\Routing\Controller as Controller;
 use Auth;
 use Carbon\Carbon;
+use DevDojo\Chatter\Events\ChatterAfterNewDiscussion;
+use DevDojo\Chatter\Events\ChatterBeforeNewDiscussion;
+use DevDojo\Chatter\Models\Models;
+use Event;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller as Controller;
 use Validator;
 
 class ChatterDiscussionController extends Controller
 {
-	/**
+    /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\Response
      */
     public function index(Request $request)
-    {   
+    {
         $total = 10;
         $offset = 0;
-        if($request->total){
+        if ($request->total) {
             $total = $request->total;
         }
-        if($request->offset){
+        if ($request->offset) {
             $offset = $request->offset;
         }
         $discussions = Models::discussion()->with('user')->with('post')->with('postsCount')->with('category')->orderBy('created_at', 'ASC')->take($total)->offset($offset)->get();
+
         return response()->json($discussions);
     }
 
@@ -38,27 +42,30 @@ class ChatterDiscussionController extends Controller
     public function create()
     {
         $categories = Models::category()->all();
-    	return view('chatter::discussion.create', compact('categories'));
+
+        return view('chatter::discussion.create', compact('categories'));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param \Illuminate\Http\Request $request
+     *
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request)
     {
-        $request->request->add(array('body_content' => strip_tags($request->body)));
+        $request->request->add(['body_content' => strip_tags($request->body)]);
 
         $validator = Validator::make($request->all(), [
-            'title' => 'required|min:5|max:255',
-            'body_content' => 'required|min:10',
+            'title'               => 'required|min:5|max:255',
+            'body_content'        => 'required|min:10',
             'chatter_category_id' => 'required',
         ]);
 
-        if(function_exists('chatter_before_new_discussion')){
-          chatter_before_new_discussion($request, $validator);
+        Event::fire(new ChatterBeforeNewDiscussion($request, $validator));
+        if (function_exists('chatter_before_new_discussion')) {
+            chatter_before_new_discussion($request, $validator);
         }
 
         if ($validator->fails()) {
@@ -67,20 +74,15 @@ class ChatterDiscussionController extends Controller
 
         $user_id = Auth::user()->id;
 
-        if(config('chatter.security.limit_time_between_posts')){
-
-            if($this->notEnoughTimeBetweenDiscussion()){
-                $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' trans(\'chatter::messages.minute\') ' : ' trans(\'chatter::messages.minutes\')';
-                $chatter_alert = array(
+        if (config('chatter.security.limit_time_between_posts')) {
+            if ($this->notEnoughTimeBetweenDiscussion()) {
+                $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' minute' : ' minutes';
+                $chatter_alert = [
                     'chatter_alert_type' => 'danger',
-                    'chatter_alert' => 'In order to prevent spam, Please allow at least ' . config('chatter.security.time_between_posts') . $minute_copy . ' inbetween submitting content.'
-                    );
+                    'chatter_alert'      => 'In order to prevent spam, Please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' inbetween submitting content.',
+                    ];
 
-                $default = '/' . config('chatter.routes.home');
-                $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default, "home"]);
-                $redirectUrl = event($redirectEvent);
-
-                return redirect($redirectEvent->redirectUrl)->with($chatter_alert)->withInput();
+                return redirect('/'.config('chatter.routes.home'))->with($chatter_alert)->withInput();
             }
         }
 
@@ -90,71 +92,77 @@ class ChatterDiscussionController extends Controller
         $discussion_exists = Models::discussion()->where('slug', '=', $slug)->first();
         $incrementer = 1;
         $new_slug = $slug;
-        while(isset($discussion_exists->id)){
-            $new_slug = $slug . '-' . $incrementer;
+        while (isset($discussion_exists->id)) {
+            $new_slug = $slug.'-'.$incrementer;
             $discussion_exists = Models::discussion()->where('slug', '=', $new_slug)->first();
             $incrementer += 1;
         }
 
-        if($slug != $new_slug){
+        if ($slug != $new_slug) {
             $slug = $new_slug;
         }
 
-        $new_discussion = array(
-            'title' => $request->title,
+        $new_discussion = [
+            'title'               => $request->title,
             'chatter_category_id' => $request->chatter_category_id,
-            'user_id' => $user_id,
-            'slug' => $slug,
-            'color' => $request->color
-            );
+            'user_id'             => $user_id,
+            'slug'                => $slug,
+            'color'               => $request->color,
+            ];
 
         $category = Models::category()->find($request->chatter_category_id);
-        if(!isset($category->slug)){
-          $category = Models::category()->first();
+        if (!isset($category->slug)) {
+            $category = Models::category()->first();
         }
 
         $discussion = Models::discussion()->create($new_discussion);
 
-        $new_post = array(
+        $new_post = [
             'chatter_discussion_id' => $discussion->id,
-            'user_id' => $user_id,
-            'body' => $request->body
-            );
+            'user_id'               => $user_id,
+            'body'                  => $request->body,
+            ];
+
+        if (config('chatter.editor') == 'simplemde'):
+           $new_post['markdown'] = 1;
+        endif;
+
+        // add the user to automatically be notified when new posts are submitted
+        $discussion->users()->attach($user_id);
 
         $post = Models::post()->create($new_post);
 
-
-        $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $category->slug . '/' . $slug;
-        $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
-        $redirectUrl = event($redirectEvent);
-
-        if($post->id){
-            if(function_exists('chatter_after_new_discussion')){
-              chatter_after_new_discussion($request);
+        if ($post->id) {
+            Event::fire(new ChatterAfterNewDiscussion($request));
+            if (function_exists('chatter_after_new_discussion')) {
+                chatter_after_new_discussion($request);
             }
-            $chatter_alert = array(
-                'chatter_alert_type' => 'success',
-                'chatter_alert' => trans('chatter::messages.discussioncreatedsuccessful').'.'
-                );
-            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
-        } else {
-            $chatter_alert = array(
-                'chatter_alert_type' => 'danger',
-                'chatter_alert' => trans('chatter::messages.problemcreatingdiscussion').'.'
-                );
-            return redirect($redirectEvent->redirectUrl)->with($chatter_alert);
-        }
 
+            $chatter_alert = [
+                'chatter_alert_type' => 'success',
+                'chatter_alert'      => 'Successfully created new '.config('chatter.titles.discussion').'.',
+                ];
+
+            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug)->with($chatter_alert);
+        } else {
+            $chatter_alert = [
+                'chatter_alert_type' => 'danger',
+                'chatter_alert'      => 'Whoops :( There seems to be a problem creating your '.config('chatter.titles.discussion').'.',
+                ];
+
+            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug)->with($chatter_alert);
+        }
     }
 
-    private function notEnoughTimeBetweenDiscussion(){
+    private function notEnoughTimeBetweenDiscussion()
+    {
         $user = Auth::user();
 
         $past = Carbon::now()->subMinutes(config('chatter.security.time_between_posts'));
 
         $last_discussion = Models::discussion()->where('user_id', '=', $user->id)->where('created_at', '>=', $past)->first();
 
-        if(isset($last_discussion)){
+        if (isset($last_discussion)) {
             return true;
         }
 
@@ -164,35 +172,40 @@ class ChatterDiscussionController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  int  $id
+     * @param int $id
+     *
      * @return \Illuminate\Http\Response
      */
-    public function show(Request $request, $category, $slug = null)
+    public function show($category, $slug = null)
     {
-        if(!isset($category) || !isset($slug)){
-            $default = '/' . config('chatter.routes.home');
-            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [Models::discussion(), $request, $default, "home"]);
-            $redirectUrl = event($redirectEvent);
-            return redirect( $redirectEvent->redirectUrl );
+        if (!isset($category) || !isset($slug)) {
+            return redirect(config('chatter.routes.home'));
         }
 
         $discussion = Models::discussion()->where('slug', '=', $slug)->first();
-        $discussion_category = Models::category()->find($discussion->chatter_category_id);
-        if($category != $discussion_category->slug){
-            $default = '/' . config('chatter.routes.home') . '/' . config('chatter.routes.discussion') . '/' . $discussion_category->slug . '/' . $discussion->slug;
-            $redirectEvent = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$discussion, $request, $default]);
-            $redirectUrl = event($redirectEvent);
+        if (is_null($discussion)) {
+            abort(404);
+        }
 
-            return redirect( $redirectUrl->redirectUrl );
+        $discussion_category = Models::category()->find($discussion->chatter_category_id);
+        if ($category != $discussion_category->slug) {
+            return redirect(config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$discussion_category->slug.'/'.$discussion->slug);
         }
         $posts = Models::post()->with('user')->where('chatter_discussion_id', '=', $discussion->id)->orderBy('created_at', 'ASC')->paginate(10);
-        return view('chatter::discussion', compact('discussion', 'posts'));
+
+        $chatter_editor = config('chatter.editor');
+
+        // Dynamically register markdown service provider
+        \App::register('GrahamCampbell\Markdown\MarkdownServiceProvider');
+
+        return view('chatter::discussion', compact('discussion', 'posts', 'chatter_editor'));
     }
 
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
+     * @param int $id
+     *
      * @return \Illuminate\Http\Response
      */
     public function edit($id)
@@ -203,8 +216,9 @@ class ChatterDiscussionController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param \Illuminate\Http\Request $request
+     * @param int                      $id
+     *
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request, $id)
@@ -215,7 +229,8 @@ class ChatterDiscussionController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int  $id
+     * @param int $id
+     *
      * @return \Illuminate\Http\Response
      */
     public function destroy($id)
@@ -223,7 +238,8 @@ class ChatterDiscussionController extends Controller
         //
     }
 
-    private function sanitizeContent($content){
+    private function sanitizeContent($content)
+    {
         libxml_use_internal_errors(true);
         // create a new DomDocument object
         $doc = new \DOMDocument();
@@ -239,12 +255,34 @@ class ChatterDiscussionController extends Controller
         return $doc->saveHtml();
     }
 
-    private function removeElementsByTagName($tagName, $document) {
-      $nodeList = $document->getElementsByTagName($tagName);
-      for ($nodeIdx = $nodeList->length; --$nodeIdx >= 0; ) {
-        $node = $nodeList->item($nodeIdx);
-        $node->parentNode->removeChild($node);
-      }
+    private function removeElementsByTagName($tagName, $document)
+    {
+        $nodeList = $document->getElementsByTagName($tagName);
+        for ($nodeIdx = $nodeList->length; --$nodeIdx >= 0;) {
+            $node = $nodeList->item($nodeIdx);
+            $node->parentNode->removeChild($node);
+        }
     }
 
+    public function toggleEmailNotification($category, $slug = null)
+    {
+        if (!isset($category) || !isset($slug)) {
+            return redirect(config('chatter.routes.home'));
+        }
+
+        $discussion = Models::discussion()->where('slug', '=', $slug)->first();
+
+        $user_id = Auth::user()->id;
+
+        // if it already exists, remove it
+        if ($discussion->users->contains($user_id)) {
+            $discussion->users()->detach($user_id);
+
+            return response()->json(0);
+        } else { // otherwise add it
+             $discussion->users()->attach($user_id);
+
+            return response()->json(1);
+        }
+    }
 }

@@ -18,5 +18,10 @@
 	    "psr-4": {
 	      "DevDojo\\Chatter\\": "/src"
 		}
-	}
+	},
+    "autoload-dev": {
+        "classmap": [
+            "tests/TestCase.php"
+        ]
+    }
 }
