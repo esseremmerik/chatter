@@ -6,6 +6,7 @@ use Auth;
 use Carbon\Carbon;
 use DevDojo\Chatter\Events\ChatterAfterNewResponse;
 use DevDojo\Chatter\Events\ChatterBeforeNewResponse;
+use DevDojo\Chatter\Events\RedirectUrl;
 use DevDojo\Chatter\Mail\ChatterDiscussionUpdated;
 use DevDojo\Chatter\Models\Models;
 use Event;
@@ -86,6 +87,10 @@ class ChatterPostController extends Controller
             $category = Models::category()->first();
         }
 
+        $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
+        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
+        Event::fire($eventClass);
+
         if ($new_post->id) {
             Event::fire(new ChatterAfterNewResponse($request));
             if (function_exists('chatter_after_new_response')) {
@@ -103,14 +108,14 @@ class ChatterPostController extends Controller
                 'chatter_alert'      => 'Response successfully submitted to '.config('chatter.titles.discussion').'.',
                 ];
 
-            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug)->with($chatter_alert);
+            return redirect($eventClass->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = [
                 'chatter_alert_type' => 'danger',
                 'chatter_alert'      => 'Sorry, there seems to have been a problem submitting your response.',
                 ];
 
-            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug)->with($chatter_alert);
+            return redirect($eventClass->redirectUrl)->with($chatter_alert);
         }
     }
 
@@ -157,6 +162,7 @@ class ChatterPostController extends Controller
         }
 
         $post = Models::post()->find($id);
+
         if (!Auth::guest() && (Auth::user()->id == $post->user_id)) {
             $post->body = $request->body;
             $post->save();
@@ -173,14 +179,22 @@ class ChatterPostController extends Controller
                 'chatter_alert'      => 'Successfully updated the '.config('chatter.titles.discussion').'.',
                 ];
 
-            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug)->with($chatter_alert);
+            $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
+            Event::fire($eventClass);
+
+            return redirect($eventClass->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = [
                 'chatter_alert_type' => 'danger',
                 'chatter_alert'      => 'Nah ah ah... Could not update your response. Make sure you\'re not doing anything shady.',
                 ];
 
-            return redirect('/'.config('chatter.routes.home'))->with($chatter_alert);
+            $defaultUrl = '/'.config('chatter.routes.home');
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            Event::fire($eventClass);
+
+            return redirect($eventClass->redirectUrl)->with($chatter_alert);
         }
     }
 
@@ -197,7 +211,12 @@ class ChatterPostController extends Controller
         $post = Models::post()->with('discussion')->findOrFail($id);
 
         if ($request->user()->id !== (int) $post->user_id) {
-            return redirect('/'.config('chatter.routes.home'))->with([
+
+            $defaultUrl = '/'.config('chatter.routes.home');
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            Event::fire($eventClass);
+
+            return redirect($eventClass->redirectUrl)->with([
                 'chatter_alert_type' => 'danger',
                 'chatter_alert'      => 'Nah ah ah... Could not delete the response. Make sure you\'re not doing anything shady.',
             ]);
@@ -207,7 +226,11 @@ class ChatterPostController extends Controller
             $post->discussion->posts()->delete();
             $post->discussion()->delete();
 
-            return redirect('/'.config('chatter.routes.home'))->with([
+            $defaultUrl = '/'.config('chatter.routes.home');
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            Event::fire($eventClass);
+
+            return redirect($eventClass->redirectUrl)->with([
                 'chatter_alert_type' => 'success',
                 'chatter_alert'      => 'Successfully deleted response and '.strtolower(config('chatter.titles.discussion')).'.',
             ]);
@@ -215,9 +238,10 @@ class ChatterPostController extends Controller
 
         $post->delete();
 
-        $url = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$post->discussion->category->slug.'/'.$post->discussion->slug;
-
-        return redirect($url)->with([
+        $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$post->discussion->category->slug.'/'.$post->discussion->slug;
+        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $post->discussion, $defaultUrl]);
+        Event::fire($eventClass);
+        return redirect($eventClass->redirectUrl)->with([
             'chatter_alert_type' => 'success',
             'chatter_alert'      => 'Successfully deleted response from the '.config('chatter.titles.discussion').'.',
         ]);

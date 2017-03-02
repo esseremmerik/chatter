@@ -22,10 +22,13 @@ class RedirectUrl extends Event
     /**
      * Create a new event instance.
      *
-     * @param  Order  $order
-     * @return void
+     * @param Request $request
+     * @param Discussion $discussion
+     * @param String $url
+     * @param string $type
+     * @internal param Order $order
      */
-    public function __construct(Discussion $discussion, Request $request, String $url, $type = "discussion")
+    public function __construct(Request $request, Discussion $discussion, String $url, $type = "discussion")
     {
         $this->discussion = $discussion;
         $this->request = $request;

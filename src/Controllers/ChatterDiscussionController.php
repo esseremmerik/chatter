@@ -64,6 +64,7 @@ class ChatterDiscussionController extends Controller
         ]);
 
         Event::fire(new ChatterBeforeNewDiscussion($request, $validator));
+
         if (function_exists('chatter_before_new_discussion')) {
             chatter_before_new_discussion($request, $validator);
         }
@@ -82,7 +83,11 @@ class ChatterDiscussionController extends Controller
                     'chatter_alert'      => 'In order to prevent spam, Please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' inbetween submitting content.',
                     ];
 
-                return redirect('/'.config('chatter.routes.home'))->with($chatter_alert)->withInput();
+                $defaultUrl = '/'.config('chatter.routes.home');
+                $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+                Event::fire($eventClass);
+
+                return redirect($eventClass->redirectUrl)->with($chatter_alert)->withInput();
             }
         }
 
@@ -132,6 +137,10 @@ class ChatterDiscussionController extends Controller
 
         $post = Models::post()->create($new_post);
 
+        $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug;
+        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
+        Event::fire($eventClass);
+
         if ($post->id) {
             Event::fire(new ChatterAfterNewDiscussion($request));
             if (function_exists('chatter_after_new_discussion')) {
@@ -143,14 +152,14 @@ class ChatterDiscussionController extends Controller
                 'chatter_alert'      => 'Successfully created new '.config('chatter.titles.discussion').'.',
                 ];
 
-            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug)->with($chatter_alert);
+            return redirect($eventClass->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = [
                 'chatter_alert_type' => 'danger',
                 'chatter_alert'      => 'Whoops :( There seems to be a problem creating your '.config('chatter.titles.discussion').'.',
                 ];
 
-            return redirect('/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug)->with($chatter_alert);
+            return redirect($eventClass->redirectUrl)->with($chatter_alert);
         }
     }
 
