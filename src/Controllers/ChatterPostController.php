@@ -210,10 +210,10 @@ class ChatterPostController extends Controller
     {
         $post = Models::post()->with('discussion')->findOrFail($id);
 
-        if ($request->user()->id !== (int) $post->user_id || !Gate::allows('remove-others-forum-comments')) {
+        if ($request->user()->id !== (int) $post->user_id || !\Illuminate\Support\Facades\Gate::allows('remove-others-forum-comments')) {
 
             $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $post->discussion, $defaultUrl, 'home']);
             Event::fire($eventClass);
 
             return redirect($eventClass->redirectUrl)->with([
@@ -227,7 +227,7 @@ class ChatterPostController extends Controller
             $post->discussion()->delete();
 
             $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $post->discussion, $defaultUrl, 'home']);
             Event::fire($eventClass);
 
             return redirect($eventClass->redirectUrl)->with([
