@@ -86,7 +86,8 @@ class ChatterDiscussionController extends Controller
                     ];
 
                 $defaultUrl = '/'.config('chatter.routes.home');
-                $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+                $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
+                $eventClass->setData($request, null, $defaultUrl, 'home');
                 Event::fire($eventClass);
 
                 return redirect($eventClass->redirectUrl)->with($chatter_alert)->withInput();
@@ -140,7 +141,8 @@ class ChatterDiscussionController extends Controller
         $post = Models::post()->create($new_post);
 
         $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug;
-        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
+        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
+        $eventClass->setData($request, $discussion, $defaultUrl);
         Event::fire($eventClass);
 
         if ($post->id) {

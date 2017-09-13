@@ -13,7 +13,6 @@ use Event;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as Controller;
 use Illuminate\Support\Facades\Mail;
-use Purifier;
 use Validator;
 
 class ChatterPostController extends Controller
@@ -33,11 +32,9 @@ class ChatterPostController extends Controller
         if ($request->offset) {
             $offset = $request->offset;
         }
-        $posts = Models::post()->with('user')->orderBy('created_at', 'DESC')->take($total)->offset($offset)->get();*/
+        $posts = Models::post()->with('user')->orderBy('created_at', 'DESC')->take($total)->offset($offset)->get();
 
-        // This is another unused route
-        // we return an empty array to not expose user data to the public
-        return response()->json([]);
+        return response()->json($posts);
     }
 
     /**
@@ -68,7 +65,7 @@ class ChatterPostController extends Controller
                 $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' minute' : ' minutes';
                 $chatter_alert = [
                     'chatter_alert_type' => 'danger',
-                    'chatter_alert'      => 'In order to prevent spam, please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' in between submitting content.',
+                    'chatter_alert'      => 'In order to prevent spam, Please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' inbetween submitting content.',
                     ];
 
                 return back()->with($chatter_alert)->withInput();
@@ -91,7 +88,8 @@ class ChatterPostController extends Controller
         }
 
         $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
-        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
+        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
+        $eventClass->setData($request, $discussion, $defaultUrl);
         Event::fire($eventClass);
 
         if ($new_post->id) {
@@ -167,7 +165,7 @@ class ChatterPostController extends Controller
         $post = Models::post()->find($id);
 
         if (!Auth::guest() && (Auth::user()->id == $post->user_id)) {
-            $post->body = Purifier::clean($request->body);
+            $post->body = $request->body;
             $post->save();
 
             $discussion = Models::discussion()->find($post->chatter_discussion_id);
@@ -213,10 +211,11 @@ class ChatterPostController extends Controller
     {
         $post = Models::post()->with('discussion')->findOrFail($id);
 
-        if ($request->user()->id !== (int) $post->user_id || !Gate::allows('remove-others-forum-comments')) {
+        if ($request->user()->id !== (int) $post->user_id || !\Illuminate\Support\Facades\Gate::allows('remove-others-forum-comments')) {
 
             $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            $eventClass = app()->make(DevDojo\Chatter\Events\RedirectUrl::class);
+            $eventClass->setData($request, $post->discussion, $defaultUrl, 'home');
             Event::fire($eventClass);
 
             return redirect($eventClass->redirectUrl)->with([
@@ -230,25 +229,26 @@ class ChatterPostController extends Controller
             $post->discussion()->delete();
 
             $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
+            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
+            $eventClass->setData($request, $post->discussion, $defaultUrl, 'home');
             Event::fire($eventClass);
 
             return redirect($eventClass->redirectUrl)->with([
                 'chatter_alert_type' => 'success',
-                'chatter_alert'      => 'Successfully deleted the response and '.strtolower(config('chatter.titles.discussion')).'.',
+                'chatter_alert'      => 'Successfully deleted response and '.strtolower(config('chatter.titles.discussion')).'.',
             ]);
         }
 
         $post->delete();
 
-        $url = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$post->discussion->category->slug.'/'.$post->discussion->slug;
-
         $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$post->discussion->category->slug.'/'.$post->discussion->slug;
-        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $post->discussion, $defaultUrl]);
+        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
+        $eventClass->setData($request, $post->discussion, $defaultUrl);
         Event::fire($eventClass);
+
         return redirect($eventClass->redirectUrl)->with([
             'chatter_alert_type' => 'success',
-            'chatter_alert'      => 'Successfully deleted the response from the '.config('chatter.titles.discussion').'.',
+            'chatter_alert'      => 'Successfully deleted response from the '.config('chatter.titles.discussion').'.',
         ]);
     }
 }
