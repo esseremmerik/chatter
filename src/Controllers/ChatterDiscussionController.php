@@ -21,7 +21,7 @@ class ChatterDiscussionController extends Controller
      */
     public function index(Request $request)
     {
-        $total = 10;
+        /*$total = 10;
         $offset = 0;
         if ($request->total) {
             $total = $request->total;
@@ -29,9 +29,11 @@ class ChatterDiscussionController extends Controller
         if ($request->offset) {
             $offset = $request->offset;
         }
-        $discussions = Models::discussion()->with('user')->with('post')->with('postsCount')->with('category')->orderBy('created_at', 'ASC')->take($total)->offset($offset)->get();
+        $discussions = Models::discussion()->with('user')->with('post')->with('postsCount')->with('category')->orderBy('created_at', 'ASC')->take($total)->offset($offset)->get();*/
 
-        return response()->json($discussions);
+        // Return an empty array to avoid exposing user data to the public.
+        // This index function is not being used anywhere.
+        return response()->json([]);
     }
 
     /**
@@ -80,7 +82,7 @@ class ChatterDiscussionController extends Controller
                 $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' minute' : ' minutes';
                 $chatter_alert = [
                     'chatter_alert_type' => 'danger',
-                    'chatter_alert'      => 'In order to prevent spam, Please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' inbetween submitting content.',
+                    'chatter_alert'      => 'In order to prevent spam, please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' in between submitting content.',
                     ];
 
                 $defaultUrl = '/'.config('chatter.routes.home');
@@ -149,7 +151,7 @@ class ChatterDiscussionController extends Controller
 
             $chatter_alert = [
                 'chatter_alert_type' => 'success',
-                'chatter_alert'      => 'Successfully created new '.config('chatter.titles.discussion').'.',
+                'chatter_alert'      => 'Successfully created a new '.config('chatter.titles.discussion').'.',
                 ];
 
             return redirect($eventClass->redirectUrl)->with($chatter_alert);
@@ -204,8 +206,10 @@ class ChatterDiscussionController extends Controller
 
         $chatter_editor = config('chatter.editor');
 
-        // Dynamically register markdown service provider
-        \App::register('GrahamCampbell\Markdown\MarkdownServiceProvider');
+        if ($chatter_editor == 'simplemde') {
+            // Dynamically register markdown service provider
+            \App::register('GrahamCampbell\Markdown\MarkdownServiceProvider');
+        }
 
         return view('chatter::discussion', compact('discussion', 'posts', 'chatter_editor'));
     }

@@ -3,7 +3,7 @@
 namespace DevDojo\Chatter\Events;
 
 use Illuminate\Http\Request;
-use Validator;
+use Illuminate\Validation\Validator;
 
 class ChatterBeforeNewDiscussion
 {
@@ -23,7 +23,7 @@ class ChatterBeforeNewDiscussion
      * @param Request   $request
      * @param Validator $validator
      */
-    public function __construct(Request $request, \Illuminate\Validation\Validator $validator)
+    public function __construct(Request $request, Validator $validator)
     {
         $this->request = $request;
         $this->validator = $validator;
