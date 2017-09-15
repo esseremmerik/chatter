@@ -28,12 +28,15 @@ class RedirectUrl extends Event
      * @param string $type
      * @internal param Order $order
      */
-    public function __construct(Request $request, Discussion $discussion, String $url, $type = "discussion")
+    public function __construct()
     {
-        $this->discussion = $discussion;
+        
+    }
+    
+    public function setData(Request $request, Discussion $discussion, String $url, $type = "discussion"){
+    	$this->discussion = $discussion;
         $this->request = $request;
         $this->redirectUrl = $url;
         $this->type = $type;
-
     }
 }
