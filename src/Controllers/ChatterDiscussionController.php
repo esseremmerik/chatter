@@ -65,7 +65,7 @@ class ChatterDiscussionController extends Controller
             'chatter_category_id' => 'required',
         ]);
 
-        Event::fire(new ChatterBeforeNewDiscussion($request, $validator));
+        Event::dispatch(new ChatterBeforeNewDiscussion($request, $validator));
 
         if (function_exists('chatter_before_new_discussion')) {
             chatter_before_new_discussion($request, $validator);
@@ -88,7 +88,7 @@ class ChatterDiscussionController extends Controller
                 $defaultUrl = '/'.config('chatter.routes.home');
                 $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
                 $eventClass->setData($request, null, $defaultUrl, 'home');
-                Event::fire($eventClass);
+                Event::dispatch($eventClass);
 
                 return redirect($eventClass->redirectUrl)->with($chatter_alert)->withInput();
             }
@@ -143,10 +143,10 @@ class ChatterDiscussionController extends Controller
         $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug;
         $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
         $eventClass->setData($request, $discussion, $defaultUrl);
-        Event::fire($eventClass);
+        Event::dispatch($eventClass);
 
         if ($post->id) {
-            Event::fire(new ChatterAfterNewDiscussion($request));
+            Event::dispatch(new ChatterAfterNewDiscussion($request));
             if (function_exists('chatter_after_new_discussion')) {
                 chatter_after_new_discussion($request);
             }
