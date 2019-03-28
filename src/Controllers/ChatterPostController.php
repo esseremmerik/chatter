@@ -4,18 +4,15 @@ namespace DevDojo\Chatter\Controllers;
 
 use Auth;
 use Carbon\Carbon;
-use DevDojo\Chatter\Events\ChatterAfterNewResponse;
-use DevDojo\Chatter\Events\ChatterBeforeNewResponse;
-use DevDojo\Chatter\Events\RedirectUrl;
-use DevDojo\Chatter\Mail\ChatterDiscussionUpdated;
+use DevDojo\Chatter\Events\ChatterAfterNewDiscussion;
+use DevDojo\Chatter\Events\ChatterBeforeNewDiscussion;
 use DevDojo\Chatter\Models\Models;
 use Event;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as Controller;
-use Illuminate\Support\Facades\Mail;
 use Validator;
 
-class ChatterPostController extends Controller
+class ChatterDiscussionController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -24,7 +21,7 @@ class ChatterPostController extends Controller
      */
     public function index(Request $request)
     {
-        $total = 10;
+        /*$total = 10;
         $offset = 0;
         if ($request->total) {
             $total = $request->total;
@@ -32,9 +29,23 @@ class ChatterPostController extends Controller
         if ($request->offset) {
             $offset = $request->offset;
         }
-        $posts = Models::post()->with('user')->orderBy('created_at', 'DESC')->take($total)->offset($offset)->get();
+        $discussions = Models::discussion()->with('user')->with('post')->with('postsCount')->with('category')->orderBy('created_at', 'ASC')->take($total)->offset($offset)->get();*/
 
-        return response()->json($posts);
+        // Return an empty array to avoid exposing user data to the public.
+        // This index function is not being used anywhere.
+        return response()->json([]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        $categories = Models::category()->all();
+
+        return view('chatter::discussion.create', compact('categories'));
     }
 
     /**
@@ -46,101 +57,175 @@ class ChatterPostController extends Controller
      */
     public function store(Request $request)
     {
-        $stripped_tags_body = ['body' => strip_tags($request->body)];
-        $validator = Validator::make($stripped_tags_body, [
-            'body' => 'required|min:10',
+        $request->request->add(['body_content' => strip_tags($request->body)]);
+
+        $validator = Validator::make($request->all(), [
+            'title'               => 'required|min:5|max:255',
+            'body_content'        => 'required|min:10',
+            'chatter_category_id' => 'required',
         ]);
 
-        Event::dispatch(new ChatterBeforeNewResponse($request, $validator));
-        if (function_exists('chatter_before_new_response')) {
-            chatter_before_new_response($request, $validator);
+        Event::dispatch(new ChatterBeforeNewDiscussion($request, $validator));
+
+        if (function_exists('chatter_before_new_discussion')) {
+            chatter_before_new_discussion($request, $validator);
         }
 
         if ($validator->fails()) {
             return back()->withErrors($validator)->withInput();
         }
 
+        $user_id = Auth::user()->id;
+
         if (config('chatter.security.limit_time_between_posts')) {
-            if ($this->notEnoughTimeBetweenPosts()) {
+            if ($this->notEnoughTimeBetweenDiscussion()) {
                 $minute_copy = (config('chatter.security.time_between_posts') == 1) ? ' minute' : ' minutes';
                 $chatter_alert = [
                     'chatter_alert_type' => 'danger',
-                    'chatter_alert'      => 'In order to prevent spam, Please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' inbetween submitting content.',
+                    'chatter_alert'      => 'In order to prevent spam, please allow at least '.config('chatter.security.time_between_posts').$minute_copy.' in between submitting content.',
                     ];
 
-                return back()->with($chatter_alert)->withInput();
+                $defaultUrl = '/'.config('chatter.routes.home');
+                $eventClass = app()->make(\DevDojo\Chatter\Events\RedirectUrl::class);
+                $eventClass->setData($request, null, $defaultUrl, 'home');
+                Event::dispatch($eventClass);
+
+                return redirect($eventClass->redirectUrl)->with($chatter_alert)->withInput();
             }
         }
 
-        $request->request->add(['user_id' => Auth::user()->id]);
+        // *** Let's gaurantee that we always have a generic slug *** //
+        $slug = str_slug($request->title, '-');
 
-        if (config('chatter.editor') == 'simplemde'):
-            $request->request->add(['markdown' => 1]);
-        endif;
+        $discussion_exists = Models::discussion()->where('slug', '=', $slug)->first();
+        $incrementer = 1;
+        $new_slug = $slug;
+        while (isset($discussion_exists->id)) {
+            $new_slug = $slug.'-'.$incrementer;
+            $discussion_exists = Models::discussion()->where('slug', '=', $new_slug)->first();
+            $incrementer += 1;
+        }
 
-        $new_post = Models::post()->create($request->all());
+        if ($slug != $new_slug) {
+            $slug = $new_slug;
+        }
 
-        $discussion = Models::discussion()->find($request->chatter_discussion_id);
+        $new_discussion = [
+            'title'               => $request->title,
+            'chatter_category_id' => $request->chatter_category_id,
+            'user_id'             => $user_id,
+            'slug'                => $slug,
+            'color'               => $request->color,
+            ];
 
-        $category = Models::category()->find($discussion->chatter_category_id);
+        $category = Models::category()->find($request->chatter_category_id);
         if (!isset($category->slug)) {
             $category = Models::category()->first();
         }
 
-        $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
-        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
+        $discussion = Models::discussion()->create($new_discussion);
+
+        $new_post = [
+            'chatter_discussion_id' => $discussion->id,
+            'user_id'               => $user_id,
+            'body'                  => $request->body,
+            ];
+
+        if (config('chatter.editor') == 'simplemde'):
+           $new_post['markdown'] = 1;
+        endif;
+
+        // add the user to automatically be notified when new posts are submitted
+        $discussion->users()->attach($user_id);
+
+        $post = Models::post()->create($new_post);
+
+        $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$slug;
+        $eventClass = app()->make(\DevDojo\Chatter\Events\RedirectUrl::class);
         $eventClass->setData($request, $discussion, $defaultUrl);
         Event::dispatch($eventClass);
 
-        if ($new_post->id) {
-            Event::dispatch(new ChatterAfterNewResponse($request));
-            if (function_exists('chatter_after_new_response')) {
-                chatter_after_new_response($request);
-            }
-
-            // if email notifications are enabled
-            if (config('chatter.email.enabled')) {
-                // Send email notifications about new post
-                $this->sendEmailNotifications($new_post->discussion);
+        if ($post->id) {
+            Event::dispatch(new ChatterAfterNewDiscussion($request));
+            if (function_exists('chatter_after_new_discussion')) {
+                chatter_after_new_discussion($request);
             }
 
             $chatter_alert = [
                 'chatter_alert_type' => 'success',
-                'chatter_alert'      => 'Response successfully submitted to '.config('chatter.titles.discussion').'.',
+                'chatter_alert'      => 'Successfully created a new '.config('chatter.titles.discussion').'.',
                 ];
 
             return redirect($eventClass->redirectUrl)->with($chatter_alert);
         } else {
             $chatter_alert = [
                 'chatter_alert_type' => 'danger',
-                'chatter_alert'      => 'Sorry, there seems to have been a problem submitting your response.',
+                'chatter_alert'      => 'Whoops :( There seems to be a problem creating your '.config('chatter.titles.discussion').'.',
                 ];
 
             return redirect($eventClass->redirectUrl)->with($chatter_alert);
         }
     }
 
-    private function notEnoughTimeBetweenPosts()
+    private function notEnoughTimeBetweenDiscussion()
     {
         $user = Auth::user();
 
         $past = Carbon::now()->subMinutes(config('chatter.security.time_between_posts'));
 
-        $last_post = Models::post()->where('user_id', '=', $user->id)->where('created_at', '>=', $past)->first();
+        $last_discussion = Models::discussion()->where('user_id', '=', $user->id)->where('created_at', '>=', $past)->first();
 
-        if (isset($last_post)) {
+        if (isset($last_discussion)) {
             return true;
         }
 
         return false;
     }
 
-    private function sendEmailNotifications($discussion)
+    /**
+     * Display the specified resource.
+     *
+     * @param int $id
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function show($category, $slug = null)
     {
-        $users = $discussion->users->except(Auth::user()->id);
-        foreach ($users as $user) {
-            Mail::to($user)->queue(new ChatterDiscussionUpdated($discussion));
+        if (!isset($category) || !isset($slug)) {
+            return redirect(config('chatter.routes.home'));
         }
+
+        $discussion = Models::discussion()->where('slug', '=', $slug)->first();
+        if (is_null($discussion)) {
+            abort(404);
+        }
+
+        $discussion_category = Models::category()->find($discussion->chatter_category_id);
+        if ($category != $discussion_category->slug) {
+            return redirect(config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$discussion_category->slug.'/'.$discussion->slug);
+        }
+        $posts = Models::post()->with('user')->where('chatter_discussion_id', '=', $discussion->id)->orderBy('created_at', 'ASC')->paginate(10);
+
+        $chatter_editor = config('chatter.editor');
+
+        if ($chatter_editor == 'simplemde') {
+            // Dynamically register markdown service provider
+            \App::register('GrahamCampbell\Markdown\MarkdownServiceProvider');
+        }
+
+        return view('chatter::discussion', compact('discussion', 'posts', 'chatter_editor'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param int $id
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
     }
 
     /**
@@ -153,102 +238,66 @@ class ChatterPostController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $stripped_tags_body = ['body' => strip_tags($request->body)];
-        $validator = Validator::make($stripped_tags_body, [
-            'body' => 'required|min:10',
-        ]);
-
-        if ($validator->fails()) {
-            return back()->withErrors($validator)->withInput();
-        }
-
-        $post = Models::post()->find($id);
-
-        if (!Auth::guest() && (Auth::user()->id == $post->user_id)) {
-            $post->body = $request->body;
-            $post->save();
-
-            $discussion = Models::discussion()->find($post->chatter_discussion_id);
-
-            $category = Models::category()->find($discussion->chatter_category_id);
-            if (!isset($category->slug)) {
-                $category = Models::category()->first();
-            }
-
-            $chatter_alert = [
-                'chatter_alert_type' => 'success',
-                'chatter_alert'      => 'Successfully updated the '.config('chatter.titles.discussion').'.',
-                ];
-
-            $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
-            Event::dispatch($eventClass);
-
-            return redirect($eventClass->redirectUrl)->with($chatter_alert);
-        } else {
-            $chatter_alert = [
-                'chatter_alert_type' => 'danger',
-                'chatter_alert'      => 'Nah ah ah... Could not update your response. Make sure you\'re not doing anything shady.',
-                ];
-
-            $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
-            Event::dispatch($eventClass);
-
-            return redirect($eventClass->redirectUrl)->with($chatter_alert);
-        }
+        //
     }
 
     /**
-     * Delete post.
+     * Remove the specified resource from storage.
      *
-     * @param string $id
-     * @param  \Illuminate\Http\Request
+     * @param int $id
      *
-     * @return \Illuminate\Routing\Redirect
+     * @return \Illuminate\Http\Response
      */
-    public function destroy($id, Request $request)
+    public function destroy($id)
     {
-        $post = Models::post()->with('discussion')->findOrFail($id);
+        //
+    }
 
-        if ($request->user()->id !== (int) $post->user_id || !\Illuminate\Support\Facades\Gate::allows('remove-others-forum-comments')) {
+    private function sanitizeContent($content)
+    {
+        libxml_use_internal_errors(true);
+        // create a new DomDocument object
+        $doc = new \DOMDocument();
 
-            $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make(DevDojo\Chatter\Events\RedirectUrl::class);
-            $eventClass->setData($request, $post->discussion, $defaultUrl, 'home');
-            Event::dispatch($eventClass);
+        // load the HTML into the DomDocument object (this would be your source HTML)
+        $doc->loadHTML($content);
 
-            return redirect($eventClass->redirectUrl)->with([
-                'chatter_alert_type' => 'danger',
-                'chatter_alert'      => 'Nah ah ah... Could not delete the response. Make sure you\'re not doing anything shady.',
-            ]);
+        $this->removeElementsByTagName('script', $doc);
+        $this->removeElementsByTagName('style', $doc);
+        $this->removeElementsByTagName('link', $doc);
+
+        // output cleaned html
+        return $doc->saveHtml();
+    }
+
+    private function removeElementsByTagName($tagName, $document)
+    {
+        $nodeList = $document->getElementsByTagName($tagName);
+        for ($nodeIdx = $nodeList->length; --$nodeIdx >= 0;) {
+            $node = $nodeList->item($nodeIdx);
+            $node->parentNode->removeChild($node);
+        }
+    }
+
+    public function toggleEmailNotification($category, $slug = null)
+    {
+        if (!isset($category) || !isset($slug)) {
+            return redirect(config('chatter.routes.home'));
         }
 
-        if ($post->discussion->posts()->oldest()->first()->id === $post->id) {
-            $post->discussion->posts()->delete();
-            $post->discussion()->delete();
+        $discussion = Models::discussion()->where('slug', '=', $slug)->first();
 
-            $defaultUrl = '/'.config('chatter.routes.home');
-            $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
-            $eventClass->setData($request, $post->discussion, $defaultUrl, 'home');
-            Event::dispatch($eventClass);
+        $user_id = Auth::user()->id;
 
-            return redirect($eventClass->redirectUrl)->with([
-                'chatter_alert_type' => 'success',
-                'chatter_alert'      => 'Successfully deleted response and '.strtolower(config('chatter.titles.discussion')).'.',
-            ]);
+        // if it already exists, remove it
+        if ($discussion->users->contains($user_id)) {
+            $discussion->users()->detach($user_id);
+
+            return response()->json(0);
+        } else { // otherwise add it
+             $discussion->users()->attach($user_id);
+
+            return response()->json(1);
         }
-
-        $post->delete();
-
-        $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$post->discussion->category->slug.'/'.$post->discussion->slug;
-        $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
-        $eventClass->setData($request, $post->discussion, $defaultUrl);
-        Event::dispatch($eventClass);
-
-        return redirect($eventClass->redirectUrl)->with([
-            'chatter_alert_type' => 'success',
-            'chatter_alert'      => 'Successfully deleted response from the '.config('chatter.titles.discussion').'.',
-        ]);
     }
 }
