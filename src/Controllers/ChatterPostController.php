@@ -51,7 +51,7 @@ class ChatterPostController extends Controller
             'body' => 'required|min:10',
         ]);
 
-        Event::fire(new ChatterBeforeNewResponse($request, $validator));
+        Event::dispatch(new ChatterBeforeNewResponse($request, $validator));
         if (function_exists('chatter_before_new_response')) {
             chatter_before_new_response($request, $validator);
         }
@@ -90,10 +90,10 @@ class ChatterPostController extends Controller
         $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
         $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
         $eventClass->setData($request, $discussion, $defaultUrl);
-        Event::fire($eventClass);
+        Event::dispatch($eventClass);
 
         if ($new_post->id) {
-            Event::fire(new ChatterAfterNewResponse($request));
+            Event::dispatch(new ChatterAfterNewResponse($request));
             if (function_exists('chatter_after_new_response')) {
                 chatter_after_new_response($request);
             }
@@ -182,7 +182,7 @@ class ChatterPostController extends Controller
 
             $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$category->slug.'/'.$discussion->slug;
             $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, $discussion, $defaultUrl]);
-            Event::fire($eventClass);
+            Event::dispatch($eventClass);
 
             return redirect($eventClass->redirectUrl)->with($chatter_alert);
         } else {
@@ -193,7 +193,7 @@ class ChatterPostController extends Controller
 
             $defaultUrl = '/'.config('chatter.routes.home');
             $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl', [$request, null, $defaultUrl, 'home']);
-            Event::fire($eventClass);
+            Event::dispatch($eventClass);
 
             return redirect($eventClass->redirectUrl)->with($chatter_alert);
         }
@@ -216,7 +216,7 @@ class ChatterPostController extends Controller
             $defaultUrl = '/'.config('chatter.routes.home');
             $eventClass = app()->make(DevDojo\Chatter\Events\RedirectUrl::class);
             $eventClass->setData($request, $post->discussion, $defaultUrl, 'home');
-            Event::fire($eventClass);
+            Event::dispatch($eventClass);
 
             return redirect($eventClass->redirectUrl)->with([
                 'chatter_alert_type' => 'danger',
@@ -231,7 +231,7 @@ class ChatterPostController extends Controller
             $defaultUrl = '/'.config('chatter.routes.home');
             $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
             $eventClass->setData($request, $post->discussion, $defaultUrl, 'home');
-            Event::fire($eventClass);
+            Event::dispatch($eventClass);
 
             return redirect($eventClass->redirectUrl)->with([
                 'chatter_alert_type' => 'success',
@@ -244,7 +244,7 @@ class ChatterPostController extends Controller
         $defaultUrl = '/'.config('chatter.routes.home').'/'.config('chatter.routes.discussion').'/'.$post->discussion->category->slug.'/'.$post->discussion->slug;
         $eventClass = app()->make('DevDojo\Chatter\Events\RedirectUrl');
         $eventClass->setData($request, $post->discussion, $defaultUrl);
-        Event::fire($eventClass);
+        Event::dispatch($eventClass);
 
         return redirect($eventClass->redirectUrl)->with([
             'chatter_alert_type' => 'success',
